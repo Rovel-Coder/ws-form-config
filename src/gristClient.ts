@@ -1,41 +1,37 @@
 // src/gristClient.ts
 
-// Représentation d'une ligne (si tu veux exploiter les données plus tard)
-export type FormRow = {
+export type QuestionConfig = {
   id: number
-  // Ajoute ici les champs dont tu as besoin
+  question: string
+  targetColumnId: number | null
 }
 
-// Configuration des mappings de colonnes (panneau de droite dans Grist)
-export const columnsConfig = [
-  { name: 'col1', title: 'Colonne 1', type: 'Any', optional: false },
-  { name: 'col2', title: 'Colonne 2', type: 'Any', optional: false },
-  { name: 'col3', title: 'Colonne 3', type: 'Any', optional: false },
-  // Ajoute d’autres colonnes si besoin
-]
+export type WidgetOptions = {
+  columnCount: number
+  questions: QuestionConfig[]
+  externalUrl?: string | null
+}
 
-type ColumnMapping = {
-  columns?: Record<string, unknown>
+export type FormRow = {
+  id: number
+}
+
+// API Grist typée minimalement
+type GristDocApi = {
+  create: (tableId: string, records: Array<{ fields: Record<string, unknown> }>) => Promise<unknown>
 }
 
 type GristTableInfo = {
   tableId: string
 }
 
-type GristDocApi = {
-  create: (tableId: string, records: Array<{ fields: Record<string, unknown> }>) => Promise<unknown>
-}
-
 type GristApi = {
   ready: (options?: {
     requiredAccess?: 'full' | 'read table' | 'none'
-    columns?: typeof columnsConfig
+    onEditOptions?: () => void
   }) => void
-  onRecords: (cb: (records: Record<string, unknown>[], mappings: ColumnMapping) => void) => void
-  mapColumnNames: (
-    records: Record<string, unknown>[],
-    options: { columns: typeof columnsConfig; mappings: ColumnMapping },
-  ) => Record<string, unknown>[] | null
+  onOptions: (cb: (options: WidgetOptions | undefined) => void) => void
+  setOptions?: (options: WidgetOptions) => void
   getTable: () => GristTableInfo | null
   docApi: GristDocApi
 }
@@ -46,13 +42,17 @@ declare global {
   }
 }
 
-const TABLE_ID_DEFAULT = 'Table1' // à adapter au nom de ta table
+const TABLE_ID_DEFAULT = 'Table1'
 
 let gristApi: GristApi | undefined
 let currentTableId: string | null = null
+let currentOptions: WidgetOptions | null = null
 
-// Initialisation Grist (comme pour le Gantt)
-export function initGrist(onRowsChange?: (rows: FormRow[]) => void): void {
+const optionsListeners: Array<(options: WidgetOptions) => void> = []
+const editOptionsListeners: Array<() => void> = []
+
+// Initialisation de l’API Grist
+export function initGrist(): void {
   if (typeof window === 'undefined' || !window.grist) {
     console.warn('Grist API non détectée, mode standalone.')
     return
@@ -62,37 +62,52 @@ export function initGrist(onRowsChange?: (rows: FormRow[]) => void): void {
 
   gristApi.ready({
     requiredAccess: 'full',
-    columns: columnsConfig,
+    onEditOptions: () => {
+      editOptionsListeners.forEach((cb) => cb())
+    },
   })
 
-  if (!onRowsChange) {
-    return
-  }
-
-  gristApi.onRecords((records: Record<string, unknown>[], mappings: ColumnMapping): void => {
-    const mapped = gristApi!.mapColumnNames(records, {
-      columns: columnsConfig,
-      mappings,
-    })
-
-    if (!mapped) {
-      onRowsChange([])
-      currentTableId = null
+  gristApi.onOptions((options: WidgetOptions | undefined) => {
+    if (!options) {
       return
     }
-
-    const tableInfo = gristApi!.getTable()
-    currentTableId = tableInfo ? tableInfo.tableId : null
-
-    const rows: FormRow[] = mapped.map((r) => ({
-      id: Number(r.id),
-    }))
-
-    onRowsChange(rows)
+    currentOptions = options
+    optionsListeners.forEach((cb) => cb(options))
   })
+
+  const tableInfo = gristApi.getTable()
+  currentTableId = tableInfo ? tableInfo.tableId : null
 }
 
-// Création d’une ligne dans la table Grist à partir d’un payload { Colonne X: valeur }
+// Abonnement aux options
+export function onGristOptionsChange(cb: (options: WidgetOptions) => void): void {
+  optionsListeners.push(cb)
+  if (currentOptions) {
+    cb(currentOptions)
+  }
+}
+
+// Abonnement au clic sur “Ouvrir la configuration”
+export function onEditGristOptions(cb: () => void): void {
+  editOptionsListeners.push(cb)
+}
+
+// Lecture des options actuelles
+export function getCurrentGristOptions(): WidgetOptions | null {
+  return currentOptions
+}
+
+// Sauvegarde des options
+export function setGristOptions(options: WidgetOptions): void {
+  if (!gristApi || !gristApi.setOptions) {
+    console.warn('setGristOptions appelé sans API Grist ou sans setOptions.')
+    return
+  }
+  currentOptions = options
+  gristApi.setOptions(options)
+}
+
+// Création d’une ligne dans la table Grist
 export async function createRowFromPayload(
   payload: Record<string, string>,
   explicitTableId?: string,

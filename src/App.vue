@@ -1,17 +1,21 @@
 <script setup lang="ts">
-import { computed, ref } from 'vue'
+import { computed, onMounted, ref } from 'vue'
 import ConfigPanel from './components/ConfigPanel.vue'
 import FormPreview from './components/FormPreview.vue'
+import {
+  createRowFromPayload,
+  getCurrentGristOptions,
+  initGrist,
+  onEditGristOptions,
+  onGristOptionsChange,
+  setGristOptions,
+  type QuestionConfig,
+  type WidgetOptions,
+} from './gristClient'
 
 type ColumnConfig = {
   id: number
   label: string
-}
-
-type QuestionConfig = {
-  id: number
-  question: string
-  targetColumnId: number | null
 }
 
 // Mode configuration ou mode formulaire final
@@ -39,15 +43,24 @@ const questions = ref<QuestionConfig[]>([
   { id: 3, question: 'Question 3', targetColumnId: 3 },
 ])
 
+// URL externe optionnelle pour envoi parallèle
+const externalUrl = ref<string>('')
+
+// Applique des options Grist à l’état local
+function applyOptions(options: WidgetOptions): void {
+  columnCount.value = options.columnCount
+  questions.value = options.questions.map((q) => ({ ...q }))
+  externalUrl.value = options.externalUrl ?? ''
+}
+
 // Met à jour le nombre de colonnes depuis le panneau de config
-function handleUpdateColumnCount(newCount: number) {
+function handleUpdateColumnCount(newCount: number): void {
   if (newCount < 1) {
     columnCount.value = 1
   } else {
     columnCount.value = newCount
   }
 
-  // Ajuster la longueur du tableau de questions pour correspondre au nombre de colonnes
   if (questions.value.length < columnCount.value) {
     const currentLength = questions.value.length
     for (let i = currentLength + 1; i <= columnCount.value; i += 1) {
@@ -63,22 +76,64 @@ function handleUpdateColumnCount(newCount: number) {
 }
 
 // Met à jour une question précise (texte ou colonne cible)
-function handleUpdateQuestion(updated: QuestionConfig) {
+function handleUpdateQuestion(updated: QuestionConfig): void {
   const index = questions.value.findIndex((q) => q.id === updated.id)
   if (index !== -1) {
     questions.value[index] = { ...updated }
   }
 }
 
-// Validation de la configuration -> passage en mode formulaire
-function validateConfiguration() {
+// Validation de la configuration -> sauvegarde dans Grist + passage en mode formulaire
+function validateConfiguration(): void {
+  const options: WidgetOptions = {
+    columnCount: columnCount.value,
+    questions: questions.value.map((q) => ({ ...q })),
+    externalUrl: externalUrl.value || null,
+  }
+  setGristOptions(options)
   isConfigMode.value = false
 }
 
-// Réouverture de la configuration depuis le formulaire (optionnel)
-function reopenConfiguration() {
+// Réouverture de la configuration depuis le formulaire (via bouton interne)
+function reopenConfiguration(): void {
   isConfigMode.value = true
 }
+
+// Soumission du formulaire final : envoi dans Grist (+ éventuellement URL externe)
+async function handleSubmitForm(payload: Record<string, string>): Promise<void> {
+  await createRowFromPayload(payload)
+
+  if (externalUrl.value) {
+    try {
+      await fetch(externalUrl.value, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      })
+    } catch (error) {
+      console.error('Erreur lors de l’appel à l’URL externe :', error)
+    }
+  }
+}
+
+// Initialisation Grist et synchro options
+onMounted(() => {
+  initGrist()
+
+  const initial = getCurrentGristOptions()
+  if (initial) {
+    applyOptions(initial)
+    isConfigMode.value = false
+  }
+
+  onGristOptionsChange((options) => {
+    applyOptions(options)
+  })
+
+  onEditGristOptions(() => {
+    isConfigMode.value = true
+  })
+})
 </script>
 
 <template>
@@ -89,16 +144,15 @@ function reopenConfiguration() {
         <span v-if="isConfigMode">– Mode configuration</span>
       </h1>
       <p class="app-subtitle" v-if="isConfigMode">
-        À droite&nbsp;: configuration des questions et colonnes. À gauche&nbsp;: aperçu du
-        formulaire généré.
+        Configurez le formulaire puis validez. Ensuite, seules les questions finales seront
+        affichées.
       </p>
       <p class="app-subtitle" v-else>
-        Formulaire prêt à l’emploi. Les réponses seront envoyées directement dans la table Grist.
+        Formulaire prêt à l’emploi. Les réponses sont envoyées directement dans la table Grist.
       </p>
     </header>
 
     <main class="app-main" v-if="isConfigMode">
-      <!-- Mode configuration : aperçu + panneau de config -->
       <section class="app-panel app-panel--preview">
         <FormPreview :columns="columns" :questions="questions" />
       </section>
@@ -112,6 +166,20 @@ function reopenConfiguration() {
           @update:question="handleUpdateQuestion"
         />
 
+        <div class="config-extra">
+          <label class="config-label" for="external-url"> URL externe (optionnelle) </label>
+          <input
+            id="external-url"
+            v-model="externalUrl"
+            type="url"
+            class="config-input"
+            placeholder="https://exemple.com/webhook"
+          />
+          <p class="config-help">
+            Si renseignée, chaque soumission de formulaire sera aussi envoyée à cette URL en JSON.
+          </p>
+        </div>
+
         <div class="config-actions">
           <button type="button" class="config-button-primary" @click="validateConfiguration">
             Valider la configuration et utiliser le formulaire
@@ -121,9 +189,9 @@ function reopenConfiguration() {
     </main>
 
     <main class="app-main app-main--form" v-else>
-      <!-- Mode formulaire final : le formulaire prend toute la largeur -->
       <section class="app-panel app-panel--preview app-panel--full">
-        <FormPreview :columns="columns" :questions="questions" />
+        <!-- À adapter pour que FormPreview expose un @submit avec le payload -->
+        <FormPreview :columns="columns" :questions="questions" @submit="handleSubmitForm" />
 
         <div class="config-actions config-actions--inline">
           <button type="button" class="config-button-secondary" @click="reopenConfiguration">
@@ -200,6 +268,32 @@ function reopenConfiguration() {
 
 .app-panel--full {
   min-height: 0;
+}
+
+.config-extra {
+  margin-top: 0.5rem;
+}
+
+.config-label {
+  display: block;
+  font-size: 0.8rem;
+  font-weight: 600;
+  margin-bottom: 0.25rem;
+}
+
+.config-input {
+  width: 100%;
+  box-sizing: border-box;
+  border-radius: 0.35rem;
+  border: 1px solid #c0c4d0;
+  padding: 0.3rem 0.45rem;
+  font-size: 0.85rem;
+}
+
+.config-help {
+  margin: 0.3rem 0 0;
+  font-size: 0.75rem;
+  color: #666;
 }
 
 .config-actions {
