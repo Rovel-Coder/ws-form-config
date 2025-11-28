@@ -21,7 +21,6 @@ const props = defineProps<{
 const emit = defineEmits<{
   (e: 'update:column-count', value: number): void
   (e: 'update:question', value: QuestionConfig): void
-  (e: 'save'): void
 }>()
 
 const localColumnCount = computed({
@@ -45,10 +44,6 @@ function onTargetColumnChange(q: QuestionConfig, newTargetId: string) {
     ...q,
     targetColumnId: Number.isNaN(parsed) ? null : parsed,
   })
-}
-
-function onSaveClick() {
-  emit('save')
 }
 </script>
 
@@ -113,12 +108,6 @@ function onSaveClick() {
           </select>
         </div>
       </div>
-    </div>
-
-    <div class="config-actions">
-      <button type="button" class="config-button" @click="onSaveClick">
-        Enregistrer la configuration
-      </button>
     </div>
   </div>
 </template>
@@ -204,25 +193,5 @@ function onSaveClick() {
 
 .question-field {
   margin-bottom: 0.5rem;
-}
-
-.config-actions {
-  display: flex;
-  justify-content: flex-end;
-}
-
-.config-button {
-  padding: 0.4rem 0.9rem;
-  border-radius: 0.4rem;
-  border: 1px solid #0a76f6;
-  background-color: #0a76f6;
-  color: #fff;
-  font-size: 0.8rem;
-  cursor: pointer;
-}
-
-.config-button:hover {
-  background-color: #075fcc;
-  border-color: #075fcc;
 }
 </style>

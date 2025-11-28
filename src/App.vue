@@ -1,13 +1,7 @@
 <script setup lang="ts">
-import { computed, onMounted, ref } from 'vue'
+import { computed, ref } from 'vue'
 import ConfigPanel from './components/ConfigPanel.vue'
 import FormPreview from './components/FormPreview.vue'
-import {
-  getCurrentGristOptions,
-  onEditGristOptions,
-  onGristOptionsChange,
-  setGristOptions,
-} from './gristClient'
 
 type ColumnConfig = {
   id: number
@@ -42,15 +36,6 @@ const questions = ref<QuestionConfig[]>([
   { id: 3, question: 'Question 3', targetColumnId: 3 },
 ])
 
-// Affichage / masquage du panneau de config interne
-const showConfig = ref<boolean>(true)
-
-// Applique un objet d’options (depuis Grist) à l’état local
-function applyOptionsFromGrist(options: { columnCount: number; questions: QuestionConfig[] }) {
-  columnCount.value = options.columnCount
-  questions.value = options.questions.map((q) => ({ ...q }))
-}
-
 // Met à jour le nombre de colonnes depuis le panneau de config
 function handleUpdateColumnCount(newCount: number) {
   if (newCount < 1) {
@@ -81,33 +66,6 @@ function handleUpdateQuestion(updated: QuestionConfig) {
     questions.value[index] = { ...updated }
   }
 }
-
-// Sauvegarde des options dans Grist
-function handleSaveConfig() {
-  const options = {
-    columnCount: columnCount.value,
-    questions: questions.value.map((q) => ({ ...q })),
-  }
-  setGristOptions(options)
-}
-
-// Au montage : synchroniser avec les options Grist si elles existent
-onMounted(() => {
-  const initial = getCurrentGristOptions()
-  if (initial) {
-    applyOptionsFromGrist(initial)
-  }
-
-  // Quand Grist envoie de nouvelles options (chargement doc, duplication, etc.)
-  onGristOptionsChange((options) => {
-    applyOptionsFromGrist(options)
-  })
-
-  // Quand l’utilisateur clique sur “Modifier les options” dans Grist
-  onEditGristOptions(() => {
-    showConfig.value = true
-  })
-})
 </script>
 
 <template>
@@ -126,16 +84,14 @@ onMounted(() => {
         <FormPreview :columns="columns" :questions="questions" />
       </section>
 
-      <!-- Colonne droite : panneau de configuration (type panneau de config Grist) -->
+      <!-- Colonne droite : panneau de configuration interne (dans l'iframe) -->
       <aside class="app-panel app-panel--config">
         <ConfigPanel
-          v-if="showConfig"
           :column-count="columnCount"
           :columns="columns"
           :questions="questions"
           @update:column-count="handleUpdateColumnCount"
           @update:question="handleUpdateQuestion"
-          @save="handleSaveConfig"
         />
       </aside>
     </main>
