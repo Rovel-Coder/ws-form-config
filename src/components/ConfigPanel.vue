@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed } from 'vue'
+import QuestionRow from './QuestionRow.vue'
 
 type ColumnConfig = {
   id: number
@@ -31,19 +32,8 @@ const localColumnCount = computed({
   },
 })
 
-function onQuestionInput(q: QuestionConfig, newText: string) {
-  emit('update:question', {
-    ...q,
-    question: newText,
-  })
-}
-
-function onTargetColumnChange(q: QuestionConfig, newTargetId: string) {
-  const parsed = newTargetId ? parseInt(newTargetId, 10) : NaN
-  emit('update:question', {
-    ...q,
-    targetColumnId: Number.isNaN(parsed) ? null : parsed,
-  })
+function onQuestionUpdate(updated: QuestionConfig) {
+  emit('update:question', updated)
 }
 </script>
 
@@ -73,41 +63,13 @@ function onTargetColumnChange(q: QuestionConfig, newTargetId: string) {
         alimente.
       </p>
 
-      <div v-for="q in questions" :key="q.id" class="question-row">
-        <div class="question-header">
-          <span class="question-index"> Question {{ q.id }} </span>
-        </div>
-
-        <div class="question-field">
-          <label class="config-label config-label--sm" :for="`question-text-${q.id}`">
-            Intitulé de la question
-          </label>
-          <input
-            :id="`question-text-${q.id}`"
-            type="text"
-            class="config-input"
-            :value="q.question"
-            @input="onQuestionInput(q, ($event.target as HTMLInputElement).value)"
-          />
-        </div>
-
-        <div class="question-field">
-          <label class="config-label config-label--sm" :for="`question-target-${q.id}`">
-            Colonne à alimenter
-          </label>
-          <select
-            :id="`question-target-${q.id}`"
-            class="config-select"
-            :value="q.targetColumnId ?? ''"
-            @change="onTargetColumnChange(q, ($event.target as HTMLSelectElement).value)"
-          >
-            <option value="">— Sélectionner une colonne —</option>
-            <option v-for="col in columns" :key="col.id" :value="col.id">
-              {{ col.label }}
-            </option>
-          </select>
-        </div>
-      </div>
+      <QuestionRow
+        v-for="q in questions"
+        :key="q.id"
+        :question="q"
+        :columns="columns"
+        @update:question="onQuestionUpdate"
+      />
     </div>
   </div>
 </template>
@@ -170,28 +132,5 @@ function onTargetColumnChange(q: QuestionConfig, newTargetId: string) {
   margin: 0.3rem 0 0;
   font-size: 0.75rem;
   color: #666;
-}
-
-.question-row {
-  margin-top: 0.6rem;
-  padding-top: 0.6rem;
-  border-top: 1px dashed #d0d0e0;
-}
-
-.question-header {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  margin-bottom: 0.35rem;
-}
-
-.question-index {
-  font-size: 0.8rem;
-  font-weight: 600;
-  color: #333;
-}
-
-.question-field {
-  margin-bottom: 0.5rem;
 }
 </style>

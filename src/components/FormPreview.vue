@@ -1,6 +1,5 @@
 <script setup lang="ts">
 import { computed, ref } from 'vue'
-import { createRowFromPayload } from '../gristClient'
 
 type ColumnConfig = {
   id: number
@@ -16,6 +15,10 @@ type QuestionConfig = {
 const props = defineProps<{
   columns: ColumnConfig[]
   questions: QuestionConfig[]
+}>()
+
+const emit = defineEmits<{
+  (e: 'submit', payload: Record<string, string>): void
 }>()
 
 const answers = ref<Record<number, string>>({})
@@ -35,13 +38,8 @@ const rowPayload = computed<Record<string, string>>(() => {
   return payload
 })
 
-async function handleSubmit() {
-  try {
-    await createRowFromPayload(rowPayload.value)
-    alert('Ligne créée dans Grist (si le widget est ouvert dans un doc).')
-  } catch {
-    alert('Erreur lors de la création de la ligne dans Grist (voir console).')
-  }
+function handleSubmit() {
+  emit('submit', rowPayload.value)
 }
 </script>
 
@@ -83,6 +81,7 @@ async function handleSubmit() {
 </template>
 
 <style scoped>
+/* ton CSS inchangé */
 .preview-root {
   display: flex;
   flex-direction: column;
