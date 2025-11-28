@@ -14,6 +14,9 @@ type QuestionConfig = {
   targetColumnId: number | null
 }
 
+// Mode configuration ou mode formulaire final
+const isConfigMode = ref<boolean>(true)
+
 // Nombre de colonnes configurées
 const columnCount = ref<number>(3)
 
@@ -66,25 +69,40 @@ function handleUpdateQuestion(updated: QuestionConfig) {
     questions.value[index] = { ...updated }
   }
 }
+
+// Validation de la configuration -> passage en mode formulaire
+function validateConfiguration() {
+  isConfigMode.value = false
+}
+
+// Réouverture de la configuration depuis le formulaire (optionnel)
+function reopenConfiguration() {
+  isConfigMode.value = true
+}
 </script>
 
 <template>
   <div class="app-root">
     <header class="app-header">
-      <h1 class="app-title">Configuration du formulaire colonne par colonne</h1>
-      <p class="app-subtitle">
+      <h1 class="app-title">
+        Formulaire personnalisé
+        <span v-if="isConfigMode">– Mode configuration</span>
+      </h1>
+      <p class="app-subtitle" v-if="isConfigMode">
         À droite&nbsp;: configuration des questions et colonnes. À gauche&nbsp;: aperçu du
         formulaire généré.
       </p>
+      <p class="app-subtitle" v-else>
+        Formulaire prêt à l’emploi. Les réponses seront envoyées directement dans la table Grist.
+      </p>
     </header>
 
-    <main class="app-main">
-      <!-- Colonne gauche : aperçu du formulaire généré -->
+    <main class="app-main" v-if="isConfigMode">
+      <!-- Mode configuration : aperçu + panneau de config -->
       <section class="app-panel app-panel--preview">
         <FormPreview :columns="columns" :questions="questions" />
       </section>
 
-      <!-- Colonne droite : panneau de configuration interne (dans l'iframe) -->
       <aside class="app-panel app-panel--config">
         <ConfigPanel
           :column-count="columnCount"
@@ -93,7 +111,26 @@ function handleUpdateQuestion(updated: QuestionConfig) {
           @update:column-count="handleUpdateColumnCount"
           @update:question="handleUpdateQuestion"
         />
+
+        <div class="config-actions">
+          <button type="button" class="config-button-primary" @click="validateConfiguration">
+            Valider la configuration et utiliser le formulaire
+          </button>
+        </div>
       </aside>
+    </main>
+
+    <main class="app-main app-main--form" v-else>
+      <!-- Mode formulaire final : le formulaire prend toute la largeur -->
+      <section class="app-panel app-panel--preview app-panel--full">
+        <FormPreview :columns="columns" :questions="questions" />
+
+        <div class="config-actions config-actions--inline">
+          <button type="button" class="config-button-secondary" @click="reopenConfiguration">
+            Modifier la configuration
+          </button>
+        </div>
+      </section>
     </main>
   </div>
 </template>
@@ -138,6 +175,10 @@ function handleUpdateQuestion(updated: QuestionConfig) {
   padding: 1rem 1.5rem 1.5rem;
 }
 
+.app-main--form {
+  grid-template-columns: minmax(0, 1fr);
+}
+
 .app-panel {
   background-color: #ffffff;
   border-radius: 0.5rem;
@@ -152,5 +193,52 @@ function handleUpdateQuestion(updated: QuestionConfig) {
 
 .app-panel--config {
   overflow: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.app-panel--full {
+  min-height: 0;
+}
+
+.config-actions {
+  margin-top: 0.75rem;
+  display: flex;
+  justify-content: flex-end;
+}
+
+.config-actions--inline {
+  justify-content: space-between;
+  margin-top: 1rem;
+}
+
+.config-button-primary,
+.config-button-secondary {
+  padding: 0.4rem 0.9rem;
+  border-radius: 0.4rem;
+  font-size: 0.8rem;
+  cursor: pointer;
+}
+
+.config-button-primary {
+  border: 1px solid #0a76f6;
+  background-color: #0a76f6;
+  color: #fff;
+}
+
+.config-button-primary:hover {
+  background-color: #075fcc;
+  border-color: #075fcc;
+}
+
+.config-button-secondary {
+  border: 1px solid #999;
+  background-color: #f5f5f5;
+  color: #333;
+}
+
+.config-button-secondary:hover {
+  background-color: #e5e5e5;
 }
 </style>
