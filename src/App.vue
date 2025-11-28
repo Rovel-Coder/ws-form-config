@@ -4,56 +4,35 @@ import ConfigPanel from './components/ConfigPanel.vue'
 import FormPreview from './components/FormPreview.vue'
 import {
   createRowFromPayload,
+  getCurrentGristColumns,
   getCurrentGristOptions,
   initGrist,
   onEditGristOptions,
+  onGristColumnsChange,
   onGristOptionsChange,
   setGristOptions,
   type QuestionConfig,
+  type TableColumn,
   type WidgetOptions,
 } from './gristClient'
 
-type ColumnConfig = {
-  id: number
-  label: string
-}
-
-// Mode configuration ou mode formulaire final
 const isConfigMode = ref<boolean>(true)
 
-// Nombre de colonnes configurées
 const columnCount = ref<number>(3)
 
-// Liste des colonnes dérivée du nombre
-const columns = computed<ColumnConfig[]>(() => {
-  const list: ColumnConfig[] = []
-  for (let i = 1; i <= columnCount.value; i += 1) {
-    list.push({
-      id: i,
-      label: `Colonne ${i}`,
-    })
-  }
-  return list
-})
-
-// Liste des questions configurées
 const questions = ref<QuestionConfig[]>([
-  { id: 1, question: 'Question 1', targetColumnId: 1 },
-  { id: 2, question: 'Question 2', targetColumnId: 2 },
-  { id: 3, question: 'Question 3', targetColumnId: 3 },
+  { id: 1, question: 'Question 1', targetColumnId: null },
+  { id: 2, question: 'Question 2', targetColumnId: null },
+  { id: 3, question: 'Question 3', targetColumnId: null },
 ])
 
-// URL externe optionnelle pour envoi parallèle
+const allColumns = ref<TableColumn[]>([])
 const externalUrl = ref<string>('')
 
-// Applique des options Grist à l’état local
-function applyOptions(options: WidgetOptions): void {
-  columnCount.value = options.columnCount
-  questions.value = options.questions.map((q) => ({ ...q }))
-  externalUrl.value = options.externalUrl ?? ''
-}
+// colonnes passées aux composants (juste un computed sur allColumns)
+const columnsView = computed(() => allColumns.value)
 
-// Met à jour le nombre de colonnes depuis le panneau de config
+// Ajustement du nombre de questions
 function handleUpdateColumnCount(newCount: number): void {
   if (newCount < 1) {
     columnCount.value = 1
@@ -67,7 +46,7 @@ function handleUpdateColumnCount(newCount: number): void {
       questions.value.push({
         id: i,
         question: `Question ${i}`,
-        targetColumnId: i <= columns.value.length ? i : null,
+        targetColumnId: null,
       })
     }
   } else if (questions.value.length > columnCount.value) {
@@ -75,7 +54,6 @@ function handleUpdateColumnCount(newCount: number): void {
   }
 }
 
-// Met à jour une question précise (texte ou colonne cible)
 function handleUpdateQuestion(updated: QuestionConfig): void {
   const index = questions.value.findIndex((q) => q.id === updated.id)
   if (index !== -1) {
@@ -83,7 +61,6 @@ function handleUpdateQuestion(updated: QuestionConfig): void {
   }
 }
 
-// Validation de la configuration -> sauvegarde dans Grist + passage en mode formulaire
 function validateConfiguration(): void {
   const options: WidgetOptions = {
     columnCount: columnCount.value,
@@ -94,12 +71,10 @@ function validateConfiguration(): void {
   isConfigMode.value = false
 }
 
-// Réouverture de la configuration depuis le formulaire (via bouton interne)
 function reopenConfiguration(): void {
   isConfigMode.value = true
 }
 
-// Soumission du formulaire final : envoi dans Grist (+ éventuellement URL externe)
 async function handleSubmitForm(payload: Record<string, string>): Promise<void> {
   await createRowFromPayload(payload)
 
@@ -116,9 +91,20 @@ async function handleSubmitForm(payload: Record<string, string>): Promise<void> 
   }
 }
 
-// Initialisation Grist et synchro options
+function applyOptions(options: WidgetOptions): void {
+  columnCount.value = options.columnCount
+  questions.value = options.questions.map((q) => ({ ...q }))
+  externalUrl.value = options.externalUrl ?? ''
+}
+
 onMounted(() => {
   initGrist()
+
+  allColumns.value = getCurrentGristColumns()
+
+  onGristColumnsChange((cols) => {
+    allColumns.value = cols
+  })
 
   const initial = getCurrentGristOptions()
   if (initial) {
@@ -144,23 +130,22 @@ onMounted(() => {
         <span v-if="isConfigMode">– Mode configuration</span>
       </h1>
       <p class="app-subtitle" v-if="isConfigMode">
-        Configurez le formulaire puis validez. Ensuite, seules les questions finales seront
-        affichées.
+        Configurez les questions et mappez-les directement sur les colonnes de la table source.
       </p>
       <p class="app-subtitle" v-else>
-        Formulaire prêt à l’emploi. Les réponses sont envoyées directement dans la table Grist.
+        Formulaire prêt à l’emploi. Les réponses sont écrites dans la table Grist.
       </p>
     </header>
 
     <main class="app-main" v-if="isConfigMode">
       <section class="app-panel app-panel--preview">
-        <FormPreview :columns="columns" :questions="questions" />
+        <FormPreview :columns="columnsView" :questions="questions" @submit="handleSubmitForm" />
       </section>
 
       <aside class="app-panel app-panel--config">
         <ConfigPanel
           :column-count="columnCount"
-          :columns="columns"
+          :columns="columnsView"
           :questions="questions"
           @update:column-count="handleUpdateColumnCount"
           @update:question="handleUpdateQuestion"
@@ -176,7 +161,7 @@ onMounted(() => {
             placeholder="https://exemple.com/webhook"
           />
           <p class="config-help">
-            Si renseignée, chaque soumission de formulaire sera aussi envoyée à cette URL en JSON.
+            Si renseignée, chaque soumission sera aussi envoyée à cette URL en JSON.
           </p>
         </div>
 
@@ -190,8 +175,7 @@ onMounted(() => {
 
     <main class="app-main app-main--form" v-else>
       <section class="app-panel app-panel--preview app-panel--full">
-        <!-- À adapter pour que FormPreview expose un @submit avec le payload -->
-        <FormPreview :columns="columns" :questions="questions" @submit="handleSubmitForm" />
+        <FormPreview :columns="columnsView" :questions="questions" @submit="handleSubmitForm" />
 
         <div class="config-actions config-actions--inline">
           <button type="button" class="config-button-secondary" @click="reopenConfiguration">
@@ -204,6 +188,7 @@ onMounted(() => {
 </template>
 
 <style scoped>
+/* même style global que ta version précédente */
 .app-root {
   min-height: 100vh;
   display: flex;
@@ -216,25 +201,21 @@ onMounted(() => {
     sans-serif;
   background-color: #f5f5f7;
 }
-
 .app-header {
   padding: 1rem 1.5rem;
   border-bottom: 1px solid #d0d0e0;
   background-color: #ffffff;
 }
-
 .app-title {
   margin: 0;
   font-size: 1.1rem;
   font-weight: 600;
 }
-
 .app-subtitle {
   margin: 0.25rem 0 0;
   font-size: 0.85rem;
   color: #555;
 }
-
 .app-main {
   flex: 1;
   display: grid;
@@ -242,11 +223,9 @@ onMounted(() => {
   gap: 1rem;
   padding: 1rem 1.5rem 1.5rem;
 }
-
 .app-main--form {
   grid-template-columns: minmax(0, 1fr);
 }
-
 .app-panel {
   background-color: #ffffff;
   border-radius: 0.5rem;
@@ -254,33 +233,27 @@ onMounted(() => {
   padding: 1rem;
   box-shadow: 0 1px 2px rgba(15, 23, 42, 0.04);
 }
-
 .app-panel--preview {
   overflow: auto;
 }
-
 .app-panel--config {
   overflow: auto;
   display: flex;
   flex-direction: column;
   gap: 0.75rem;
 }
-
 .app-panel--full {
   min-height: 0;
 }
-
 .config-extra {
   margin-top: 0.5rem;
 }
-
 .config-label {
   display: block;
   font-size: 0.8rem;
   font-weight: 600;
   margin-bottom: 0.25rem;
 }
-
 .config-input {
   width: 100%;
   box-sizing: border-box;
@@ -289,24 +262,20 @@ onMounted(() => {
   padding: 0.3rem 0.45rem;
   font-size: 0.85rem;
 }
-
 .config-help {
   margin: 0.3rem 0 0;
   font-size: 0.75rem;
   color: #666;
 }
-
 .config-actions {
   margin-top: 0.75rem;
   display: flex;
   justify-content: flex-end;
 }
-
 .config-actions--inline {
   justify-content: space-between;
   margin-top: 1rem;
 }
-
 .config-button-primary,
 .config-button-secondary {
   padding: 0.4rem 0.9rem;
@@ -314,25 +283,14 @@ onMounted(() => {
   font-size: 0.8rem;
   cursor: pointer;
 }
-
 .config-button-primary {
   border: 1px solid #0a76f6;
   background-color: #0a76f6;
   color: #fff;
 }
-
-.config-button-primary:hover {
-  background-color: #075fcc;
-  border-color: #075fcc;
-}
-
 .config-button-secondary {
   border: 1px solid #999;
   background-color: #f5f5f5;
   color: #333;
-}
-
-.config-button-secondary:hover {
-  background-color: #e5e5e5;
 }
 </style>

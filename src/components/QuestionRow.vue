@@ -1,18 +1,19 @@
 <script setup lang="ts">
-type ColumnConfig = {
-  id: number
+type TableColumn = {
+  id: string
   label: string
+  type: string
 }
 
 type QuestionConfig = {
   id: number
   question: string
-  targetColumnId: number | null
+  targetColumnId: string | null
 }
 
 const props = defineProps<{
   question: QuestionConfig
-  columns: ColumnConfig[]
+  columns: TableColumn[]
 }>()
 
 const emit = defineEmits<{
@@ -27,10 +28,9 @@ function onQuestionInput(newText: string) {
 }
 
 function onTargetColumnChange(newTargetId: string) {
-  const parsed = newTargetId ? parseInt(newTargetId, 10) : NaN
   emit('update:question', {
     ...props.question,
-    targetColumnId: Number.isNaN(parsed) ? null : parsed,
+    targetColumnId: newTargetId || null,
   })
 }
 </script>
@@ -56,7 +56,7 @@ function onTargetColumnChange(newTargetId: string) {
 
     <div class="question-field">
       <label class="config-label config-label--sm" :for="`question-target-${question.id}`">
-        Colonne à alimenter
+        Colonne à alimenter (table source)
       </label>
       <select
         :id="`question-target-${question.id}`"
@@ -66,7 +66,7 @@ function onTargetColumnChange(newTargetId: string) {
       >
         <option value="">— Sélectionner une colonne —</option>
         <option v-for="col in columns" :key="col.id" :value="col.id">
-          {{ col.label }}
+          {{ col.label }} ({{ col.id }})
         </option>
       </select>
     </div>
@@ -79,35 +79,29 @@ function onTargetColumnChange(newTargetId: string) {
   padding-top: 0.6rem;
   border-top: 1px dashed #d0d0e0;
 }
-
 .question-header {
   display: flex;
   justify-content: space-between;
   align-items: center;
   margin-bottom: 0.35rem;
 }
-
 .question-index {
   font-size: 0.8rem;
   font-weight: 600;
   color: #333;
 }
-
 .question-field {
   margin-bottom: 0.5rem;
 }
-
 .config-label {
   display: block;
   font-size: 0.8rem;
   font-weight: 600;
   margin-bottom: 0.25rem;
 }
-
 .config-label--sm {
   font-weight: 500;
 }
-
 .config-input,
 .config-select {
   width: 100%;

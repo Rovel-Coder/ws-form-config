@@ -1,19 +1,20 @@
 <script setup lang="ts">
 import { computed, ref } from 'vue'
 
-type ColumnConfig = {
-  id: number
+type TableColumn = {
+  id: string
   label: string
+  type: string
 }
 
 type QuestionConfig = {
   id: number
   question: string
-  targetColumnId: number | null
+  targetColumnId: string | null // id réel de colonne
 }
 
 const props = defineProps<{
-  columns: ColumnConfig[]
+  columns: TableColumn[]
   questions: QuestionConfig[]
 }>()
 
@@ -25,16 +26,11 @@ const answers = ref<Record<number, string>>({})
 
 const rowPayload = computed<Record<string, string>>(() => {
   const payload: Record<string, string> = {}
-
   props.questions.forEach((q) => {
-    if (q.targetColumnId != null) {
-      const col = props.columns.find((c) => c.id === q.targetColumnId)
-      if (col) {
-        payload[col.label] = answers.value[q.id] ?? ''
-      }
+    if (q.targetColumnId) {
+      payload[q.targetColumnId] = answers.value[q.id] ?? ''
     }
   })
-
   return payload
 })
 
@@ -48,16 +44,16 @@ function handleSubmit() {
     <h2 class="preview-title">Aperçu du formulaire généré</h2>
 
     <p class="preview-help">
-      Ce formulaire est construit à partir des questions et de leur colonne cible. Chaque champ
-      alimente une colonne de la table source.
+      Chaque question alimente directement une colonne réelle de la table source.
     </p>
 
     <form class="preview-form" @submit.prevent="handleSubmit">
       <div v-for="q in questions" :key="q.id" class="preview-field">
         <label class="preview-label" :for="`answer-q-${q.id}`">
           {{ q.question || `Question ${q.id}` }}
-          <span v-if="q.targetColumnId != null" class="preview-tag">
-            → Col. {{ columns.find((c) => c.id === q.targetColumnId)?.label || q.targetColumnId }}
+          <span v-if="q.targetColumnId" class="preview-tag">
+            →
+            {{ columns.find((c) => c.id === q.targetColumnId)?.label || q.targetColumnId }}
           </span>
           <span v-else class="preview-tag preview-tag--warning"> non liée à une colonne </span>
         </label>
@@ -74,56 +70,49 @@ function handleSubmit() {
     </form>
 
     <div class="preview-payload">
-      <h3 class="preview-subtitle">Structure de la ligne générée</h3>
+      <h3 class="preview-subtitle">Payload envoyé (colonne → valeur)</h3>
       <pre class="preview-json">{{ rowPayload }}</pre>
     </div>
   </div>
 </template>
 
 <style scoped>
-/* ton CSS inchangé */
+/* même CSS que ta version précédente */
 .preview-root {
   display: flex;
   flex-direction: column;
   gap: 0.75rem;
 }
-
 .preview-title {
   margin: 0;
   font-size: 0.95rem;
   font-weight: 600;
 }
-
 .preview-subtitle {
   margin: 0 0 0.25rem;
   font-size: 0.9rem;
   font-weight: 600;
 }
-
 .preview-help {
   margin: 0;
   font-size: 0.78rem;
   color: #666;
 }
-
 .preview-form {
   margin-top: 0.4rem;
   display: flex;
   flex-direction: column;
   gap: 0.6rem;
 }
-
 .preview-field {
   display: flex;
   flex-direction: column;
   gap: 0.15rem;
 }
-
 .preview-label {
   font-size: 0.82rem;
   font-weight: 500;
 }
-
 .preview-tag {
   margin-left: 0.4rem;
   font-size: 0.7rem;
@@ -132,12 +121,10 @@ function handleSubmit() {
   background-color: #e5f1ff;
   color: #1452a5;
 }
-
 .preview-tag--warning {
   background-color: #fff3cd;
   color: #8a6d3b;
 }
-
 .preview-input {
   width: 100%;
   box-sizing: border-box;
@@ -146,13 +133,6 @@ function handleSubmit() {
   padding: 0.3rem 0.45rem;
   font-size: 0.85rem;
 }
-
-.preview-input:focus {
-  outline: 2px solid #0a76f6;
-  outline-offset: 1px;
-  border-color: #0a76f6;
-}
-
 .preview-submit {
   align-self: flex-start;
   margin-top: 0.3rem;
@@ -165,11 +145,6 @@ function handleSubmit() {
   color: #fff;
   cursor: pointer;
 }
-
-.preview-submit:hover {
-  background-color: #075ec4;
-}
-
 .preview-payload {
   margin-top: 0.7rem;
   border-radius: 0.5rem;
@@ -177,7 +152,6 @@ function handleSubmit() {
   background-color: #f8fafc;
   padding: 0.6rem 0.7rem;
 }
-
 .preview-json {
   margin: 0;
   font-size: 0.75rem;
